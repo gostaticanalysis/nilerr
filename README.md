@@ -2,7 +2,7 @@
 
 [![godoc.org][godoc-badge]][godoc]
 
-`nilerr` finds codes which are returning nil and checking either error is not nil.
+`nilerr` finds code which returns nil even though it checks that error is not nil.
 
 ```go
 func f() error {
