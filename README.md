@@ -13,7 +13,7 @@ func f() error {
 }
 ```
 
-`nilerr` also finds codes which are returning error and checking either error is nil.
+`nilerr` also finds code which returns error even though it checks that error is nil.
 
 ```go
 func f() error {
@@ -24,7 +24,7 @@ func f() error {
 }
 ```
 
-`nilerr` ignores a code which has a miss with ignore comment.
+`nilerr` ignores code which has a miss with ignore comment.
 
 ```go
 func f() error {
