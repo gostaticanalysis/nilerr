@@ -1,7 +1,6 @@
 package nilerr
 
 import (
-	"go/ast"
 	"go/token"
 	"go/types"
 
@@ -9,24 +8,14 @@ import (
 	"github.com/gostaticanalysis/comment/passes/commentmap"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
-	"golang.org/x/tools/go/analysis/passes/inspect"
-	"golang.org/x/tools/go/ast/inspector"
 	"golang.org/x/tools/go/ssa"
 )
-
-// flags
-var annotation = "return nil"
-
-func init() {
-	Analyzer.Flags.StringVar(&annotation, "annotation", annotation, "annotation for explicit return nil")
-}
 
 var Analyzer = &analysis.Analyzer{
 	Name: "nilerr",
 	Doc:  Doc,
 	Run:  run,
 	Requires: []*analysis.Analyzer{
-		inspect.Analyzer,
 		buildssa.Analyzer,
 		commentmap.Analyzer,
 	},
@@ -35,29 +24,29 @@ var Analyzer = &analysis.Analyzer{
 const Doc = "nilerr checks returning nil when err is not nil"
 
 func run(pass *analysis.Pass) (interface{}, error) {
-	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	funcs := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA).SrcFuncs
 	cmaps := pass.ResultOf[commentmap.Analyzer].(comment.Maps)
 
-	returns := map[token.Pos]ast.Node{}
-	nodeFilter := []ast.Node{
-		(*ast.ReturnStmt)(nil),
-	}
-
-	inspector.Preorder(nodeFilter, func(n ast.Node) {
-		returns[n.Pos()] = n
-	})
-
 	for i := range funcs {
 		for _, b := range funcs[i].Blocks {
-			if errIsNotNil(b) {
+			if v := binOpErrNil(b, token.NEQ); v != nil {
 				if ret := isReturnNil(b.Succs[0]); ret != nil {
-					n, ok := returns[ret.Pos()]
-					if ok && !cmaps.Annotated(n, annotation) {
-						pass.Reportf(ret.Pos(), "error is not nil but it returns nil")
+					pos := ret.Pos()
+					line := pass.Fset.File(pos).Line(pos)
+					if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
+						pass.Reportf(pos, "error is not nil but it returns nil")
+					}
+				}
+			} else if v := binOpErrNil(b, token.EQL); v != nil {
+				if ret := isReturnError(b.Succs[0], v); ret != nil {
+					pos := ret.Pos()
+					line := pass.Fset.File(pos).Line(pos)
+					if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
+						pass.Reportf(pos, "error is nil but it returns error")
 					}
 				}
 			}
+
 		}
 	}
 
@@ -66,39 +55,42 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 var errType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
 
-func errIsNotNil(b *ssa.BasicBlock) bool {
+func binOpErrNil(b *ssa.BasicBlock, op token.Token) ssa.Value {
 	if len(b.Instrs) == 0 {
-		return false
+		return nil
 	}
 
 	ifinst, ok := b.Instrs[len(b.Instrs)-1].(*ssa.If)
 	if !ok {
-		return false
+		return nil
 	}
 
 	binop, ok := ifinst.Cond.(*ssa.BinOp)
 	if !ok {
-		return false
+		return nil
 	}
 
-	if binop.Op != token.NEQ {
-		return false
+	if binop.Op != op {
+		return nil
 	}
 
 	if !types.Implements(binop.X.Type(), errType) {
-		return false
+		return nil
 	}
 
 	if !types.Implements(binop.Y.Type(), errType) {
-		return false
+		return nil
 	}
 
 	xIsConst, yIsConst := isConst(binop.X), isConst(binop.Y)
-	if (!xIsConst && !yIsConst) || (xIsConst && yIsConst) {
-		return false
+	switch {
+	case !xIsConst && yIsConst: // err != nil or err == nil
+		return binop.X
+	case xIsConst && !yIsConst: // nil != err or nil == err
+		return binop.Y
 	}
 
-	return true
+	return nil
 }
 
 func isConst(v ssa.Value) bool {
@@ -130,6 +122,28 @@ func isReturnNil(b *ssa.BasicBlock) *ssa.Return {
 	}
 
 	if !v.IsNil() {
+		return nil
+	}
+
+	return ret
+}
+
+func isReturnError(b *ssa.BasicBlock, errVal ssa.Value) *ssa.Return {
+	if len(b.Instrs) == 0 {
+		return nil
+	}
+
+	ret, ok := b.Instrs[len(b.Instrs)-1].(*ssa.Return)
+	if !ok {
+		return nil
+	}
+
+	if len(ret.Results) == 0 {
+		return nil
+	}
+
+	v := ret.Results[len(ret.Results)-1]
+	if v != errVal {
 		return nil
 	}
 
