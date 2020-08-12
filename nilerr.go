@@ -31,10 +31,12 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		for _, b := range funcs[i].Blocks {
 			if v := binOpErrNil(b, token.NEQ); v != nil {
 				if ret := isReturnNil(b.Succs[0]); ret != nil {
-					pos := ret.Pos()
-					line := pass.Fset.File(pos).Line(pos)
-					if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
-						pass.Reportf(pos, "error is not nil but it returns nil")
+					if !usesErrorValue(b.Succs[0], v) {
+						pos := ret.Pos()
+						line := pass.Fset.File(pos).Line(pos)
+						if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
+							pass.Reportf(pos, "error is not nil but it returns nil")
+						}
 					}
 				}
 			} else if v := binOpErrNil(b, token.EQL); v != nil {
@@ -148,4 +150,17 @@ func isReturnError(b *ssa.BasicBlock, errVal ssa.Value) *ssa.Return {
 	}
 
 	return ret
+}
+
+func usesErrorValue(b *ssa.BasicBlock, errVal ssa.Value) bool {
+	for _, instr := range b.Instrs {
+		if callInstr, ok := instr.(*ssa.Call); ok {
+			for _, arg := range callInstr.Call.Args {
+				if arg == errVal {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
