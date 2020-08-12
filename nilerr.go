@@ -27,25 +27,27 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	funcs := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA).SrcFuncs
 	cmaps := pass.ResultOf[commentmap.Analyzer].(comment.Maps)
 
+	reportFail := func(v ssa.Value, ret *ssa.Return, format string) {
+		errPos := v.Pos()
+		errLine := pass.Fset.File(errPos).Line(errPos)
+		pos := ret.Pos()
+		line := pass.Fset.File(pos).Line(pos)
+		if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
+			pass.Reportf(pos, format, errLine)
+		}
+	}
+
 	for i := range funcs {
 		for _, b := range funcs[i].Blocks {
 			if v := binOpErrNil(b, token.NEQ); v != nil {
 				if ret := isReturnNil(b.Succs[0]); ret != nil {
 					if !usesErrorValue(b.Succs[0], v) {
-						pos := ret.Pos()
-						line := pass.Fset.File(pos).Line(pos)
-						if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
-							pass.Reportf(pos, "error is not nil but it returns nil")
-						}
+						reportFail(v, ret, "error is not nil (line %d) but it returns nil")
 					}
 				}
 			} else if v := binOpErrNil(b, token.EQL); v != nil {
 				if ret := isReturnError(b.Succs[0], v); ret != nil {
-					pos := ret.Pos()
-					line := pass.Fset.File(pos).Line(pos)
-					if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
-						pass.Reportf(pos, "error is nil but it returns error")
-					}
+					reportFail(v, ret, "error is nil (line %d) but it returns error")
 				}
 			}
 

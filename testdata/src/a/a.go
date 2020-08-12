@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"testing"
 )
 
 func do() error {
@@ -13,11 +14,11 @@ func do() error {
 func f() error {
 	err := do()
 	if err != nil {
-		return nil // want "error is not nil but it returns nil"
+		return nil // want "error is not nil \\(line 15\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
-		return nil // want "error is not nil but it returns nil"
+		return nil // want "error is not nil \\(line 20\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
@@ -31,11 +32,11 @@ func f() error {
 func g() error {
 	err := do()
 	if err == nil {
-		return err // want "error is nil but it returns error"
+		return err // want "error is nil \\(line 33\\) but it returns error"
 	}
 
 	if err := do(); err == nil {
-		return err // want "error is nil but it returns error"
+		return err // want "error is nil \\(line 38\\) but it returns error"
 	}
 
 	if err := do(); err == nil {
@@ -77,6 +78,28 @@ func g() error {
 	}
 
 	return nil
+}
+
+func h() {
+	f0 := func() error {
+		for {
+			if err := do(); err != nil {
+				break
+			}
+		}
+		return nil // want "error is not nil \\(line 86\\) but it returns nil"
+	}
+	_ = f0
+
+	f1 := func(t *testing.T) error {
+		for {
+			if err := do(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	}
+	_ = f1
 }
 
 func CustomLoggingFunc(err error) {
