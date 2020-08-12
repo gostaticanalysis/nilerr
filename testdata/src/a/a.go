@@ -1,6 +1,7 @@
 package a
 
 import (
+	"context"
 	"errors"
 	"log"
 )
@@ -46,12 +47,27 @@ func g() error {
 	}
 
 	if err := do(); err != nil {
-		CustomLoggingFunc(err) // OK, error is used (most probably, for logging)
+		CustomLoggingFunc(err) // OK
 		return nil
 	}
 
 	if err := do(); err != nil {
-		NewLogger().CustomLoggingFunc(err) // OK, error is used (most probably, for logging)
+		Logf(context.Background(), "error: %+v", err) // OK
+		return nil
+	}
+
+	if err := do(); err != nil {
+		LogTypedf(context.Background(), "error: %+v", err) // OK
+		return nil
+	}
+
+	if err := do(); err != nil {
+		LogSinglef(context.Background(), "error: %+v", err) // OK
+		return nil
+	}
+
+	if err := do(); err != nil {
+		NewLogger().CustomLoggingFunc(err) // OK
 		return nil
 	}
 
@@ -65,6 +81,18 @@ func g() error {
 
 func CustomLoggingFunc(err error) {
 	log.Printf("%+v", err)
+}
+
+func Logf(ctx context.Context, msg string, args ...interface{}) {
+	log.Printf(msg, args...)
+}
+
+func LogTypedf(ctx context.Context, msg string, args ...error) {
+	log.Printf(msg, args[0])
+}
+
+func LogSinglef(ctx context.Context, msg string, arg interface{}) {
+	log.Printf(msg, arg)
 }
 
 type logger int

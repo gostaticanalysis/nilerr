@@ -156,11 +156,95 @@ func usesErrorValue(b *ssa.BasicBlock, errVal ssa.Value) bool {
 	for _, instr := range b.Instrs {
 		if callInstr, ok := instr.(*ssa.Call); ok {
 			for _, arg := range callInstr.Call.Args {
-				if arg == errVal {
+				if isUsedInValue(arg, errVal) {
 					return true
+				}
+
+				sliceArg, ok := arg.(*ssa.Slice)
+				if ok {
+					if isUsedInSlice(sliceArg, errVal) {
+						return true
+					}
 				}
 			}
 		}
 	}
+	return false
+}
+
+type ReferrersHolder interface {
+	Referrers() *[]ssa.Instruction
+}
+
+var _ ReferrersHolder = (ssa.Node)(nil)
+var _ ReferrersHolder = (ssa.Value)(nil)
+
+func isUsedInSlice(sliceArg *ssa.Slice, errVal ssa.Value) bool {
+	var valueBuf [10]*ssa.Value
+	operands := sliceArg.Operands(valueBuf[:0])
+
+	var valuesToInspect []ssa.Value
+	addValueForInspection := func(value ssa.Value) {
+		if value != nil {
+			valuesToInspect = append(valuesToInspect, value)
+		}
+	}
+
+	var nodesToInspect []ssa.Node
+	visitedNodes := map[ssa.Node]bool{}
+	addNodeForInspection := func(node ssa.Node) {
+		if !visitedNodes[node] {
+			visitedNodes[node] = true
+			nodesToInspect = append(nodesToInspect, node)
+		}
+	}
+	addReferrersForInspection := func(h ReferrersHolder) {
+		if h == nil {
+			return
+		}
+
+		referrers := h.Referrers()
+		if referrers == nil {
+			return
+		}
+
+		for _, r := range *referrers {
+			if node, ok := r.(ssa.Node); ok {
+				addNodeForInspection(node)
+			}
+		}
+	}
+
+	for _, operand := range operands {
+		addReferrersForInspection(*operand)
+		addValueForInspection(*operand)
+	}
+
+	for i := 0; i < len(nodesToInspect); i++ {
+		switch node := nodesToInspect[i].(type) {
+		case *ssa.IndexAddr:
+			addReferrersForInspection(node)
+		case *ssa.Store:
+			addValueForInspection(node.Val)
+		}
+	}
+
+	for _, value := range valuesToInspect {
+		if isUsedInValue(value, errVal) {
+			return true
+		}
+	}
+	return false
+}
+
+func isUsedInValue(value, lookedFor ssa.Value) bool {
+	if value == lookedFor {
+		return true
+	}
+
+	if ci, ok := value.(*ssa.ChangeInterface); ok {
+		return isUsedInValue(ci.X, lookedFor)
+	}
+
 	return false
 }
