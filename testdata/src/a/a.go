@@ -22,23 +22,28 @@ func f() error {
 		return nil // OK
 	}
 
+	err = do()
+	if err == nil || checkErr(err) {
+		return err
+	}
+
 	return nil
 }
 
 func g() error {
 	err := do()
 	if err == nil {
-		return err // want "error is nil \\(line 29\\) but it returns error"
+		return err // want "error is nil \\(line 34\\) but it returns error"
 	}
 
 	if err := do(); err == nil {
-		return err // want "error is nil \\(line 34\\) but it returns error"
+		return err // want "error is nil \\(line 39\\) but it returns error"
 	}
 
 	bytes, err := do2()
 	if err == nil {
 		_ = bytes
-		return err // want "error is nil \\(line 38\\) but it returns error"
+		return err // want "error is nil \\(line 43\\) but it returns error"
 	}
 
 	if err := do(); err == nil {
@@ -56,6 +61,11 @@ func g() error {
 
 	if err := do(); err != nil {
 		Logf(context.Background(), "error: %+v", err) // OK
+		return nil
+	}
+
+	if err := do(); err != nil {
+		Logf(context.Background(), "error: %s", err.Error()) // OK
 		return nil
 	}
 
@@ -89,7 +99,7 @@ func h() {
 				break
 			}
 		}
-		return nil // want "error is not nil \\(line 88\\) but it returns nil"
+		return nil // want "error is not nil \\(line 98\\) but it returns nil"
 	}
 	_ = f0
 
@@ -106,7 +116,7 @@ func h() {
 
 func i() (error, error) {
 	if err := do(); err != nil {
-		return nil, nil // want "error is not nil \\(line 108\\) but it returns nil"
+		return nil, nil // want "error is not nil \\(line 118\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
@@ -126,7 +136,7 @@ func i() (error, error) {
 
 func j() (interface{}, error) {
 	if err := do(); err != nil {
-		return nil, nil // want "error is not nil \\(line 128\\) but it returns nil"
+		return nil, nil // want "error is not nil \\(line 138\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
@@ -134,7 +144,7 @@ func j() (interface{}, error) {
 	}
 
 	if err := do(); err != nil {
-		return err, nil // want "error is not nil \\(line 136\\) but it returns nil"
+		return err, nil // want "error is not nil \\(line 146\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
@@ -179,7 +189,7 @@ func l() error {
 	}
 
 	_ = bytes
-	return nil // want "error is not nil \\(lines \\[168 171\\]\\) but it returns nil"
+	return nil // want "error is not nil \\(lines \\[178 181\\]\\) but it returns nil"
 }
 
 func do() error {
@@ -188,6 +198,10 @@ func do() error {
 
 func do2() ([]byte, error) {
 	return nil, nil
+}
+
+func checkErr(err error) bool {
+	return true
 }
 
 func CustomLoggingFunc(err error) {

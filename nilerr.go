@@ -52,8 +52,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					}
 				}
 			} else if v := binOpErrNil(b, token.EQL); v != nil {
-				if ret := isReturnError(b.Succs[0], v); ret != nil {
-					reportFail(v, ret, "error is nil (%s) but it returns error")
+				if len(b.Succs[0].Preds) == 1 { // if there are multiple conditions, this may be false positive
+					if ret := isReturnError(b.Succs[0], v); ret != nil {
+						reportFail(v, ret, "error is nil (%s) but it returns error")
+					}
 				}
 			}
 
@@ -274,8 +276,15 @@ func isUsedInValue(value, lookedFor ssa.Value) bool {
 		return true
 	}
 
-	if ci, ok := value.(*ssa.ChangeInterface); ok {
-		return isUsedInValue(ci.X, lookedFor)
+	switch value := value.(type) {
+	case *ssa.ChangeInterface:
+		return isUsedInValue(value.X, lookedFor)
+	case *ssa.MakeInterface:
+		return isUsedInValue(value.X, lookedFor)
+	case *ssa.Call:
+		if value.Call.IsInvoke() {
+			return isUsedInValue(value.Call.Value, lookedFor)
+		}
 	}
 
 	return false
