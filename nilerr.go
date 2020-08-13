@@ -28,10 +28,9 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	cmaps := pass.ResultOf[commentmap.Analyzer].(comment.Maps)
 
 	reportFail := func(v ssa.Value, ret *ssa.Return, format string) {
-		errPos := v.Pos()
-		errLine := pass.Fset.File(errPos).Line(errPos)
 		pos := ret.Pos()
-		line := pass.Fset.File(pos).Line(pos)
+		line := getNodeLineNumber(pass, ret)
+		errLine := getValueLineNumber(pass, v)
 		if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
 			pass.Reportf(pos, format, errLine)
 		}
@@ -55,6 +54,21 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	}
 
 	return nil, nil
+}
+
+func getValueLineNumber(pass *analysis.Pass, v ssa.Value) int {
+	value := v
+	if extract, ok := value.(*ssa.Extract); ok {
+		value = extract.Tuple
+	}
+
+	pos := value.Pos()
+	return pass.Fset.File(pos).Line(pos)
+}
+
+func getNodeLineNumber(pass *analysis.Pass, node ssa.Node) int {
+	pos := node.Pos()
+	return pass.Fset.File(pos).Line(pos)
 }
 
 var errType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)

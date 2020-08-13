@@ -7,18 +7,14 @@ import (
 	"testing"
 )
 
-func do() error {
-	return nil
-}
-
 func f() error {
 	err := do()
 	if err != nil {
-		return nil // want "error is not nil \\(line 15\\) but it returns nil"
+		return nil // want "error is not nil \\(line 11\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
-		return nil // want "error is not nil \\(line 20\\) but it returns nil"
+		return nil // want "error is not nil \\(line 16\\) but it returns nil"
 	}
 
 	if err := do(); err != nil {
@@ -32,10 +28,16 @@ func f() error {
 func g() error {
 	err := do()
 	if err == nil {
-		return err // want "error is nil \\(line 33\\) but it returns error"
+		return err // want "error is nil \\(line 29\\) but it returns error"
 	}
 
 	if err := do(); err == nil {
+		return err // want "error is nil \\(line 34\\) but it returns error"
+	}
+
+	bytes, err := do2()
+	if err == nil {
+		_ = bytes
 		return err // want "error is nil \\(line 38\\) but it returns error"
 	}
 
@@ -87,7 +89,7 @@ func h() {
 				break
 			}
 		}
-		return nil // want "error is not nil \\(line 86\\) but it returns nil"
+		return nil // want "error is not nil \\(line 88\\) but it returns nil"
 	}
 	_ = f0
 
@@ -100,6 +102,14 @@ func h() {
 		return nil
 	}
 	_ = f1
+}
+
+func do() error {
+	return nil
+}
+
+func do2() ([]byte, error) {
+	return nil, nil
 }
 
 func CustomLoggingFunc(err error) {
