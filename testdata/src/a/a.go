@@ -154,6 +154,34 @@ func k()  {
 	}
 }
 
+func l() error {
+	var e = errors.New("x")
+
+	bytes, err := do2()
+	if err != nil {
+		return err
+	}
+	defer func() error {return nil}()
+
+	for {
+		var buf []byte
+		buf, err = do2()
+		if err == e {
+			for err == e {
+				_, err = do2()
+			}
+			if err != nil {
+				err = errors.New("a")
+				break
+			}
+		}
+		_ = buf
+	}
+
+	_ = bytes
+	return nil // want "error is not nil \\(lines \\[168 171\\]\\) but it returns nil"
+}
+
 func do() error {
 	return nil
 }

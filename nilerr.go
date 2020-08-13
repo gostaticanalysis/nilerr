@@ -1,6 +1,7 @@
 package nilerr
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
 
@@ -30,9 +31,15 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	reportFail := func(v ssa.Value, ret *ssa.Return, format string) {
 		pos := ret.Pos()
 		line := getNodeLineNumber(pass, ret)
-		errLine := getValueLineNumber(pass, v)
+		errLines := getValueLineNumbers(pass, v)
 		if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
-			pass.Reportf(pos, format, errLine)
+			var errLineText string
+			if len(errLines) == 1 {
+				errLineText = fmt.Sprintf("line %d", errLines[0])
+			} else {
+				errLineText = fmt.Sprintf("lines %v", errLines)
+			}
+			pass.Reportf(pos, format, errLineText)
 		}
 	}
 
@@ -41,12 +48,12 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			if v := binOpErrNil(b, token.NEQ); v != nil {
 				if ret := isReturnNil(b.Succs[0]); ret != nil {
 					if !usesErrorValue(b.Succs[0], v) {
-						reportFail(v, ret, "error is not nil (line %d) but it returns nil")
+						reportFail(v, ret, "error is not nil (%s) but it returns nil")
 					}
 				}
 			} else if v := binOpErrNil(b, token.EQL); v != nil {
 				if ret := isReturnError(b.Succs[0], v); ret != nil {
-					reportFail(v, ret, "error is nil (line %d) but it returns error")
+					reportFail(v, ret, "error is nil (%s) but it returns error")
 				}
 			}
 
@@ -56,14 +63,22 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-func getValueLineNumber(pass *analysis.Pass, v ssa.Value) int {
+func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
+	if phi, ok := v.(*ssa.Phi); ok {
+		result := make([]int, 0, len(phi.Edges))
+		for _, edge := range phi.Edges {
+			result = append(result, getValueLineNumbers(pass, edge)...)
+		}
+		return result
+	}
+
 	value := v
 	if extract, ok := value.(*ssa.Extract); ok {
 		value = extract.Tuple
 	}
 
 	pos := value.Pos()
-	return pass.Fset.File(pos).Line(pos)
+	return []int{pass.Fset.File(pos).Line(pos)}
 }
 
 func getNodeLineNumber(pass *analysis.Pass, node ssa.Node) int {
