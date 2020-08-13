@@ -126,20 +126,24 @@ func isReturnNil(b *ssa.BasicBlock) *ssa.Return {
 		return nil
 	}
 
-	if len(ret.Results) == 0 {
-		return nil
+	errorReturnValues := 0
+	for _, res := range ret.Results {
+		if !types.Implements(res.Type(), errType) {
+			continue
+		}
+
+		errorReturnValues++
+		v, ok := res.(*ssa.Const)
+		if !ok {
+			return nil
+		}
+
+		if !v.IsNil() {
+			return nil
+		}
 	}
 
-	v, ok := ret.Results[len(ret.Results)-1].(*ssa.Const)
-	if !ok {
-		return nil
-	}
-
-	if !types.Implements(v.Type(), errType) {
-		return nil
-	}
-
-	if !v.IsNil() {
+	if errorReturnValues == 0 {
 		return nil
 	}
 
@@ -156,16 +160,13 @@ func isReturnError(b *ssa.BasicBlock, errVal ssa.Value) *ssa.Return {
 		return nil
 	}
 
-	if len(ret.Results) == 0 {
-		return nil
+	for _, v := range ret.Results {
+		if v == errVal {
+			return ret
+		}
 	}
 
-	v := ret.Results[len(ret.Results)-1]
-	if v != errVal {
-		return nil
-	}
-
-	return ret
+	return nil
 }
 
 func usesErrorValue(b *ssa.BasicBlock, errVal ssa.Value) bool {

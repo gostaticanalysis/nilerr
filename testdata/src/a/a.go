@@ -104,6 +104,56 @@ func h() {
 	_ = f1
 }
 
+func i() (error, error) {
+	if err := do(); err != nil {
+		return nil, nil // want "error is not nil \\(line 108\\) but it returns nil"
+	}
+
+	if err := do(); err != nil {
+		return nil, err
+	}
+
+	if err := do(); err != nil {
+		return err, nil
+	}
+
+	if err := do(); err != nil {
+		return err, err
+	}
+
+	return nil, nil
+}
+
+func j() (interface{}, error) {
+	if err := do(); err != nil {
+		return nil, nil // want "error is not nil \\(line 128\\) but it returns nil"
+	}
+
+	if err := do(); err != nil {
+		return nil, err
+	}
+
+	if err := do(); err != nil {
+		return err, nil // want "error is not nil \\(line 136\\) but it returns nil"
+	}
+
+	if err := do(); err != nil {
+		return err, err
+	}
+
+	return nil, nil
+}
+
+func k()  {
+	if err := do(); err != nil {
+		return
+	}
+
+	if err := do(); err == nil {
+		return
+	}
+}
+
 func do() error {
 	return nil
 }
