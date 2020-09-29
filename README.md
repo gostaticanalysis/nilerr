@@ -1,6 +1,6 @@
 # nilerr
 
-[![godoc.org][godoc-badge]][godoc]
+[![pkg.go.dev][gopkg-badge]][gopkg]
 
 `nilerr` finds code which returns nil even though it checks that error is not nil.
 
@@ -37,6 +37,5 @@ func f() error {
 ```
 
 <!-- links -->
-[godoc]: https://godoc.org/github.com/gostaticanalysis/nilerr
-[godoc-badge]: https://img.shields.io/badge/godoc-reference-4F73B3.svg?style=flat-square&label=%20godoc.org
-
+[gopkg]: https://pkg.go.dev/github.com/gostaticanalysis/nilerr
+[gopkg-badge]: https://pkg.go.dev/badge/github.com/gostaticanalysis/nilerr?status.svg
