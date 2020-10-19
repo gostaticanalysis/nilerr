@@ -1,6 +1,7 @@
 package nilerr
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
 
@@ -27,22 +28,33 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	funcs := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA).SrcFuncs
 	cmaps := pass.ResultOf[commentmap.Analyzer].(comment.Maps)
 
+	reportFail := func(v ssa.Value, ret *ssa.Return, format string) {
+		pos := ret.Pos()
+		line := getNodeLineNumber(pass, ret)
+		errLines := getValueLineNumbers(pass, v)
+		if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
+			var errLineText string
+			if len(errLines) == 1 {
+				errLineText = fmt.Sprintf("line %d", errLines[0])
+			} else {
+				errLineText = fmt.Sprintf("lines %v", errLines)
+			}
+			pass.Reportf(pos, format, errLineText)
+		}
+	}
+
 	for i := range funcs {
 		for _, b := range funcs[i].Blocks {
 			if v := binOpErrNil(b, token.NEQ); v != nil {
 				if ret := isReturnNil(b.Succs[0]); ret != nil {
-					pos := ret.Pos()
-					line := pass.Fset.File(pos).Line(pos)
-					if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
-						pass.Reportf(pos, "error is not nil but it returns nil")
+					if !usesErrorValue(b.Succs[0], v) {
+						reportFail(v, ret, "error is not nil (%s) but it returns nil")
 					}
 				}
 			} else if v := binOpErrNil(b, token.EQL); v != nil {
-				if ret := isReturnError(b.Succs[0], v); ret != nil {
-					pos := ret.Pos()
-					line := pass.Fset.File(pos).Line(pos)
-					if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
-						pass.Reportf(pos, "error is nil but it returns error")
+				if len(b.Succs[0].Preds) == 1 { // if there are multiple conditions, this may be false positive
+					if ret := isReturnError(b.Succs[0], v); ret != nil {
+						reportFail(v, ret, "error is nil (%s) but it returns error")
 					}
 				}
 			}
@@ -51,6 +63,29 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	}
 
 	return nil, nil
+}
+
+func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
+	if phi, ok := v.(*ssa.Phi); ok {
+		result := make([]int, 0, len(phi.Edges))
+		for _, edge := range phi.Edges {
+			result = append(result, getValueLineNumbers(pass, edge)...)
+		}
+		return result
+	}
+
+	value := v
+	if extract, ok := value.(*ssa.Extract); ok {
+		value = extract.Tuple
+	}
+
+	pos := value.Pos()
+	return []int{pass.Fset.File(pos).Line(pos)}
+}
+
+func getNodeLineNumber(pass *analysis.Pass, node ssa.Node) int {
+	pos := node.Pos()
+	return pass.Fset.File(pos).Line(pos)
 }
 
 var errType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
@@ -108,20 +143,24 @@ func isReturnNil(b *ssa.BasicBlock) *ssa.Return {
 		return nil
 	}
 
-	if len(ret.Results) == 0 {
-		return nil
+	errorReturnValues := 0
+	for _, res := range ret.Results {
+		if !types.Implements(res.Type(), errType) {
+			continue
+		}
+
+		errorReturnValues++
+		v, ok := res.(*ssa.Const)
+		if !ok {
+			return nil
+		}
+
+		if !v.IsNil() {
+			return nil
+		}
 	}
 
-	v, ok := ret.Results[len(ret.Results)-1].(*ssa.Const)
-	if !ok {
-		return nil
-	}
-
-	if !types.Implements(v.Type(), errType) {
-		return nil
-	}
-
-	if !v.IsNil() {
+	if errorReturnValues == 0 {
 		return nil
 	}
 
@@ -138,14 +177,115 @@ func isReturnError(b *ssa.BasicBlock, errVal ssa.Value) *ssa.Return {
 		return nil
 	}
 
-	if len(ret.Results) == 0 {
-		return nil
+	for _, v := range ret.Results {
+		if v == errVal {
+			return ret
+		}
 	}
 
-	v := ret.Results[len(ret.Results)-1]
-	if v != errVal {
-		return nil
+	return nil
+}
+
+func usesErrorValue(b *ssa.BasicBlock, errVal ssa.Value) bool {
+	for _, instr := range b.Instrs {
+		if callInstr, ok := instr.(*ssa.Call); ok {
+			for _, arg := range callInstr.Call.Args {
+				if isUsedInValue(arg, errVal) {
+					return true
+				}
+
+				sliceArg, ok := arg.(*ssa.Slice)
+				if ok {
+					if isUsedInSlice(sliceArg, errVal) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+type ReferrersHolder interface {
+	Referrers() *[]ssa.Instruction
+}
+
+var _ ReferrersHolder = (ssa.Node)(nil)
+var _ ReferrersHolder = (ssa.Value)(nil)
+
+func isUsedInSlice(sliceArg *ssa.Slice, errVal ssa.Value) bool {
+	var valueBuf [10]*ssa.Value
+	operands := sliceArg.Operands(valueBuf[:0])
+
+	var valuesToInspect []ssa.Value
+	addValueForInspection := func(value ssa.Value) {
+		if value != nil {
+			valuesToInspect = append(valuesToInspect, value)
+		}
 	}
 
-	return ret
+	var nodesToInspect []ssa.Node
+	visitedNodes := map[ssa.Node]bool{}
+	addNodeForInspection := func(node ssa.Node) {
+		if !visitedNodes[node] {
+			visitedNodes[node] = true
+			nodesToInspect = append(nodesToInspect, node)
+		}
+	}
+	addReferrersForInspection := func(h ReferrersHolder) {
+		if h == nil {
+			return
+		}
+
+		referrers := h.Referrers()
+		if referrers == nil {
+			return
+		}
+
+		for _, r := range *referrers {
+			if node, ok := r.(ssa.Node); ok {
+				addNodeForInspection(node)
+			}
+		}
+	}
+
+	for _, operand := range operands {
+		addReferrersForInspection(*operand)
+		addValueForInspection(*operand)
+	}
+
+	for i := 0; i < len(nodesToInspect); i++ {
+		switch node := nodesToInspect[i].(type) {
+		case *ssa.IndexAddr:
+			addReferrersForInspection(node)
+		case *ssa.Store:
+			addValueForInspection(node.Val)
+		}
+	}
+
+	for _, value := range valuesToInspect {
+		if isUsedInValue(value, errVal) {
+			return true
+		}
+	}
+	return false
+}
+
+func isUsedInValue(value, lookedFor ssa.Value) bool {
+	if value == lookedFor {
+		return true
+	}
+
+	switch value := value.(type) {
+	case *ssa.ChangeInterface:
+		return isUsedInValue(value.X, lookedFor)
+	case *ssa.MakeInterface:
+		return isUsedInValue(value.X, lookedFor)
+	case *ssa.Call:
+		if value.Call.IsInvoke() {
+			return isUsedInValue(value.Call.Value, lookedFor)
+		}
+	}
+
+	return false
 }
