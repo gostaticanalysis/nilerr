@@ -189,7 +189,7 @@ func l() error {
 	}
 
 	_ = bytes
-	return nil // want "error is not nil \\(lines \\[178 181\\]\\) but it returns nil"
+	return nil
 }
 
 func do() error {

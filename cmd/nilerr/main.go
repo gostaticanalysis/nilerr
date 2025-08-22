@@ -1,8 +1,9 @@
 package main
 
 import (
+	"golang.org/x/tools/go/analysis/unitchecker"
+
 	"github.com/gostaticanalysis/nilerr"
-	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
-func main() { singlechecker.Main(nilerr.Analyzer) }
+func main() { unitchecker.Main(nilerr.Analyzer) }

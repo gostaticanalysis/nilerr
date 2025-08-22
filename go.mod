@@ -1,8 +1,13 @@
 module github.com/gostaticanalysis/nilerr
 
-go 1.15
+go 1.25.0
 
 require (
-	github.com/gostaticanalysis/comment v1.4.1
-	golang.org/x/tools v0.0.0-20201023174141-c8cfbd0f21e6
+	github.com/gostaticanalysis/comment v1.5.0
+	golang.org/x/tools v0.36.0
+)
+
+require (
+	golang.org/x/mod v0.27.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
 )
