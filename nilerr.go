@@ -30,9 +30,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 	reportFail := func(v ssa.Value, ret *ssa.Return, format string) {
 		pos := ret.Pos()
-		line := getNodeLineNumber(pass, ret)
 		errLines := getValueLineNumbers(pass, v)
-		if !cmaps.IgnoreLine(pass.Fset, line, "nilerr") {
+		if !cmaps.IgnorePos(pos, "nilerr") {
 			var errLineText string
 			if len(errLines) == 1 {
 				errLineText = fmt.Sprintf("line %d", errLines[0])
@@ -81,11 +80,6 @@ func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
 
 	pos := value.Pos()
 	return []int{pass.Fset.File(pos).Line(pos)}
-}
-
-func getNodeLineNumber(pass *analysis.Pass, node ssa.Node) int {
-	pos := node.Pos()
-	return pass.Fset.File(pos).Line(pos)
 }
 
 var errType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
