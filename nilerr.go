@@ -68,8 +68,15 @@ func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
 	if phi, ok := v.(*ssa.Phi); ok {
 		result := make([]int, 0, len(phi.Edges))
 		for _, edge := range phi.Edges {
+			if phi.Pos() == edge.Pos() {
+				result = append(result, pass.Fset.File(phi.Pos()).Line(phi.Pos()))
+
+				continue
+			}
+
 			result = append(result, getValueLineNumbers(pass, edge)...)
 		}
+
 		return result
 	}
 
@@ -79,6 +86,11 @@ func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
 	}
 
 	pos := value.Pos()
+
+	if pos == token.NoPos {
+		return nil
+	}
+
 	return []int{pass.Fset.File(pos).Line(pos)}
 }
 
