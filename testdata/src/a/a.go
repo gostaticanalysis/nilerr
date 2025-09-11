@@ -154,7 +154,7 @@ func j() (interface{}, error) {
 	return nil, nil
 }
 
-func k()  {
+func k() {
 	if err := do(); err != nil {
 		return
 	}
@@ -165,31 +165,29 @@ func k()  {
 }
 
 func l() error {
-	var e = errors.New("x")
+	aChan := make(chan error, 1)
+	bChan := make(chan error, 1)
 
-	bytes, err := do2()
-	if err != nil {
-		return err
-	}
-	defer func() error {return nil}()
+	var aErr error
+	var bErr error
 
-	for {
-		var buf []byte
-		buf, err = do2()
-		if err == e {
-			for err == e {
-				_, err = do2()
-			}
-			if err != nil {
-				err = errors.New("a")
-				break
-			}
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-aChan:
+			aErr = err
+		case err := <-bChan:
+			bErr = err
 		}
-		_ = buf
 	}
 
-	_ = bytes
-	return nil // want "error is not nil \\(lines \\[178 181\\]\\) but it returns nil"
+	if aErr != nil {
+		return nil // want `error is not nil \(lines \[171 175\]\) but it returns nil`
+	}
+	if bErr != nil {
+		return nil // want `error is not nil \(lines \[172 175\]\) but it returns nil`
+	}
+
+	return nil
 }
 
 func do() error {

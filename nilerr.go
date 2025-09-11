@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
+	"slices"
 
 	"github.com/gostaticanalysis/comment"
 	"github.com/gostaticanalysis/comment/passes/commentmap"
@@ -30,8 +31,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 	reportFail := func(v ssa.Value, ret *ssa.Return, format string) {
 		pos := ret.Pos()
-		errLines := getValueLineNumbers(pass, v)
 		if !cmaps.IgnorePos(pos, "nilerr") {
+			seen := map[string]struct{}{}
+			errLines := getValueLineNumbers(pass, v, seen)
+
 			var errLineText string
 			if len(errLines) == 1 {
 				errLineText = fmt.Sprintf("line %d", errLines[0])
@@ -64,12 +67,27 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
+func getValueLineNumbers(pass *analysis.Pass, v ssa.Value, seen map[string]struct{}) []int {
 	if phi, ok := v.(*ssa.Phi); ok {
 		result := make([]int, 0, len(phi.Edges))
+
 		for _, edge := range phi.Edges {
-			result = append(result, getValueLineNumbers(pass, edge)...)
+			if _, ok := seen[edge.Name()]; ok {
+				if edge.Pos() == token.NoPos {
+					continue
+				}
+
+				result = append(result, pass.Fset.File(edge.Pos()).Line(edge.Pos()))
+				continue
+			}
+
+			seen[edge.Name()] = struct{}{}
+
+			result = append(result, getValueLineNumbers(pass, edge, seen)...)
 		}
+
+		slices.Sort(result)
+
 		return result
 	}
 
@@ -79,6 +97,11 @@ func getValueLineNumbers(pass *analysis.Pass, v ssa.Value) []int {
 	}
 
 	pos := value.Pos()
+
+	if pos == token.NoPos {
+		return nil
+	}
+
 	return []int{pass.Fset.File(pos).Line(pos)}
 }
 
