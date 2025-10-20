@@ -7,7 +7,18 @@ import (
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-func Test(t *testing.T) {
+func TestAnalyzer(t *testing.T) {
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, nilerr.Analyzer, "a")
+	tests := []struct {
+		name string
+		file string
+	}{
+		{"basic", "a"},
+		{"defers", "defers"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			analysistest.Run(t, testdata, nilerr.Analyzer, test.file)
+		})
+	}
 }
