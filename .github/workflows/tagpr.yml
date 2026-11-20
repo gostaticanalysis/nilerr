@@ -1,0 +1,26 @@
+name: tagpr
+
+on:
+  push:
+    branches: [master]
+
+permissions: {}
+
+jobs:
+  tagpr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # NOTE: Pull requests and tags created with the default GITHUB_TOKEN do
+      # not trigger other workflows (e.g. CI). To run CI on the release PR,
+      # register a PAT or GitHub App token as the TAGPR_TOKEN secret.
+      # It falls back to GITHUB_TOKEN when the secret is not set.
+      - uses: Songmu/tagpr@047aec4b6c0ce166f52958b5a97f5a3d927fd65b # v1.22.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.TAGPR_TOKEN || secrets.GITHUB_TOKEN }}
