@@ -154,7 +154,7 @@ func j() (interface{}, error) {
 	return nil, nil
 }
 
-func k()  {
+func k() {
 	if err := do(); err != nil {
 		return
 	}
@@ -162,6 +162,32 @@ func k()  {
 	if err := do(); err == nil {
 		return
 	}
+}
+
+func l() error {
+	aChan := make(chan error, 1)
+	bChan := make(chan error, 1)
+
+	var aErr error
+	var bErr error
+
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-aChan:
+			aErr = err
+		case err := <-bChan:
+			bErr = err
+		}
+	}
+
+	if aErr != nil {
+		return nil // want `error is not nil \(lines \[171 175\]\) but it returns nil`
+	}
+	if bErr != nil {
+		return nil // want `error is not nil \(lines \[172 175\]\) but it returns nil`
+	}
+
+	return nil
 }
 
 func do() error {
