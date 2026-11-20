@@ -59,7 +59,9 @@ GitHub Actions are pinned to commit SHAs with [pinact](https://github.com/suzuki
 
 Releases are managed by [tagpr](https://github.com/Songmu/tagpr). Merging the release PR creates a `vX.Y.Z` tag.
 Pull requests and tags created with the default `GITHUB_TOKEN` do not trigger other workflows,
-so set a PAT or GitHub App token as the `TAGPR_TOKEN` repository secret to run CI on the release PR.
+so tagpr uses a GitHub App installation token (`actions/create-github-app-token`).
+Register the App ID as the `TAGPR_APP_ID` secret and its private key as the `TAGPR_APP_PRIVATE_KEY` secret.
+The App needs Contents (write), Pull requests (write) and Metadata (read) permissions.
 
 <!-- links -->
 [gopkg]: https://pkg.go.dev/github.com/gostaticanalysis/nilerr
