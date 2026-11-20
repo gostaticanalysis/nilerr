@@ -25,7 +25,7 @@ var Analyzer = &analysis.Analyzer{
 
 const Doc = "nilerr checks returning nil when err is not nil"
 
-func run(pass *analysis.Pass) (interface{}, error) {
+func run(pass *analysis.Pass) (any, error) {
 	funcs := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA).SrcFuncs
 	cmaps := pass.ResultOf[commentmap.Analyzer].(comment.Maps)
 
@@ -199,10 +199,8 @@ func isReturnError(b *ssa.BasicBlock, errVal ssa.Value) *ssa.Return {
 		return nil
 	}
 
-	for _, v := range ret.Results {
-		if deferredResult(b, v) == errVal {
-			return ret
-		}
+	if slices.ContainsFunc(ret.Results, func(v ssa.Value) bool { return deferredResult(b, v) == errVal }) {
+		return ret
 	}
 
 	return nil
