@@ -1,64 +1,42 @@
 package d
 
 import (
-	"errors"
-	"io"
+	"net/url"
+	"time"
 )
 
-func do() error { return nil }
-
-func wrap(errp *error) {}
-
-// Issue #19.
-func issue19() error {
-	defer func() {}()
-
-	err := do()
+// issue 16: importing standard packages such as time must not cause internal errors.
+func parseDuration(s string) (time.Duration, error) {
+	d, err := time.ParseDuration(s)
 	if err != nil {
-		return nil // want `error is not nil \(line 16\) but it returns nil`
+		return 0, err
 	}
+	return d, nil
+}
 
+// issue 12: named result with an unrelated error variable.
+func unescape(query string) (err error) {
+	query, qerr := url.QueryUnescape(query)
+	if qerr != nil {
+		return nil // want `error is not nil \(line 19\) but it returns nil`
+	}
 	return nil
 }
 
-// Issue #17: wrap may modify err through the pointer, so it is not reported.
-func issue17() (err error) {
-	defer wrap(&err)
-	err = do()
+// issue 8: lint:ignore comments must suppress the diagnostic.
+func ignoredLine() error {
+	_, err := time.ParseDuration("1s")
 	if err != nil {
+		return nil //lint:ignore nilerr reason
+	}
+	return nil
+}
+
+func ignoredPrevLine() error {
+	_, err := time.ParseDuration("1s")
+	if err != nil {
+		//lint:ignore nilerr reason
 		return nil
 	}
 	return nil
-}
-
-// Issue #18: the error is inspected by errors.Is before returning nil.
-func errorsIs() error {
-	err := do()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func errorsAs() error {
-	err := do()
-	if err != nil {
-		var pe interface{ Timeout() bool }
-		if errors.As(err, &pe) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func errorsIsOnly() error {
-	err := do()
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	return err
 }

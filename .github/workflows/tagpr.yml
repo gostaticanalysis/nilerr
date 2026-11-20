@@ -11,16 +11,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
+      # NOTE: Pull requests and tags created with the default GITHUB_TOKEN do
+      # not trigger other workflows (e.g. CI). Use a GitHub App installation
+      # token instead. Required repository secrets/variables:
+      #   - secrets.TAGPR_APP_ID                  : the GitHub App ID
+      #   - secrets.TAGPR_APP_PRIVATE_KEY             : the App private key
+      # The App needs the following repository permissions:
+      #   Contents: write, Pull requests: write, Metadata: read
+      #   (+ Workflows: write if tagpr must modify files under .github/workflows)
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.TAGPR_APP_ID }}
+          private-key: ${{ secrets.TAGPR_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # NOTE: Pull requests and tags created with the default GITHUB_TOKEN do
-      # not trigger other workflows (e.g. CI). To run CI on the release PR,
-      # register a PAT or GitHub App token as the TAGPR_TOKEN secret.
-      # It falls back to GITHUB_TOKEN when the secret is not set.
       - uses: Songmu/tagpr@047aec4b6c0ce166f52958b5a97f5a3d927fd65b # v1.22.0
         env:
-          GITHUB_TOKEN: ${{ secrets.TAGPR_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

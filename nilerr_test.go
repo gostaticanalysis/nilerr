@@ -9,7 +9,7 @@ import (
 )
 
 func Test(t *testing.T) {
-	cases := []string{"a", "b", "c", "d"}
+	cases := []string{"a", "b", "c", "d", "e"}
 
 	testdata := analysistest.TestData()
 	for _, pkg := range cases {
