@@ -1,0 +1,63 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  MODULE:
+    sh: go list -m
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  fmt:
+    desc: Format code with goimports
+    cmds:
+      - go run golang.org/x/tools/cmd/goimports@v0.53.0 -local {{.MODULE}} -w .
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run tests with the race detector (formats first)
+    deps: [fmt]
+    cmds:
+      - go test -race ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  vuln:
+    desc: Check known vulnerabilities with govulncheck
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+
+  actionlint:
+    desc: Lint GitHub Actions workflows
+    cmds:
+      - actionlint
+
+  pinact:
+    desc: Pin GitHub Actions to commit SHAs (set GITHUB_TOKEN to avoid rate limits)
+    cmds:
+      - pinact run
+
+  pinact:check:
+    desc: Check that GitHub Actions are pinned to commit SHAs
+    cmds:
+      - pinact run --check
+
+  ci:
+    desc: Run all checks executed on CI
+    cmds:
+      - task: test
+      - task: vet
+      - task: lint
+      - task: vuln
+      - task: actionlint
+      - task: pinact:check

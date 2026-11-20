@@ -1,0 +1,18 @@
+# Binaries
+/nilerr
+/cmd/nilerr/nilerr
+*.exe
+*.test
+*.out
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Secrets
+.env
+.env.*
+
+# Claude Code local files
+.claude/
