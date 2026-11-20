@@ -36,10 +36,12 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			errLines := getValueLineNumbers(pass, v, seen)
 
 			var errLineText string
-			if len(errLines) == 1 {
-				errLineText = fmt.Sprintf("line %d", errLines[0])
-			} else {
-				errLineText = fmt.Sprintf("lines %v", errLines)
+			switch len(errLines) {
+			case 0: // unknown position, e.g. a captured variable
+			case 1:
+				errLineText = fmt.Sprintf(" (line %d)", errLines[0])
+			default:
+				errLineText = fmt.Sprintf(" (lines %v)", errLines)
 			}
 			pass.Reportf(pos, format, errLineText)
 		}
@@ -50,13 +52,13 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			if v := binOpErrNil(b, token.NEQ); v != nil {
 				if ret := isReturnNil(b.Succs[0]); ret != nil {
 					if !usesErrorValue(b.Succs[0], v) {
-						reportFail(v, ret, "error is not nil (%s) but it returns nil")
+						reportFail(v, ret, "error is not nil%s but it returns nil")
 					}
 				}
 			} else if v := binOpErrNil(b, token.EQL); v != nil {
 				if len(b.Succs[0].Preds) == 1 { // if there are multiple conditions, this may be false positive
 					if ret := isReturnError(b.Succs[0], v); ret != nil {
-						reportFail(v, ret, "error is nil (%s) but it returns error")
+						reportFail(v, ret, "error is nil%s but it returns error")
 					}
 				}
 			}
@@ -170,7 +172,7 @@ func isReturnNil(b *ssa.BasicBlock) *ssa.Return {
 		}
 
 		errorReturnValues++
-		v, ok := res.(*ssa.Const)
+		v, ok := deferredResult(b, res).(*ssa.Const)
 		if !ok {
 			return nil
 		}
@@ -198,12 +200,57 @@ func isReturnError(b *ssa.BasicBlock, errVal ssa.Value) *ssa.Return {
 	}
 
 	for _, v := range ret.Results {
-		if v == errVal {
+		if deferredResult(b, v) == errVal {
 			return ret
 		}
 	}
 
 	return nil
+}
+
+// deferredResult returns the value which is stored to the result variable
+// just before the deferred functions are run.
+//
+// A function which has defer statements stores its results into result variables,
+// runs the deferred functions, and returns the loaded values of the variables.
+// If the value is not such a load, or the variable may be modified
+// by a deferred function (it is captured by a closure), v is returned as it is.
+func deferredResult(b *ssa.BasicBlock, v ssa.Value) ssa.Value {
+	load, ok := v.(*ssa.UnOp)
+	if !ok || load.Op != token.MUL {
+		return v
+	}
+
+	alloc, ok := load.X.(*ssa.Alloc)
+	if !ok {
+		return v
+	}
+
+	if referrers := alloc.Referrers(); referrers != nil {
+		for _, r := range *referrers {
+			switch r.(type) {
+			case *ssa.Store, *ssa.UnOp, *ssa.DebugRef:
+			default:
+				return v // e.g. captured by a closure
+			}
+		}
+	}
+
+	runDefersIdx := slices.IndexFunc(b.Instrs, func(instr ssa.Instruction) bool {
+		_, ok := instr.(*ssa.RunDefers)
+		return ok
+	})
+	if runDefersIdx < 0 {
+		return v
+	}
+
+	for i := runDefersIdx - 1; i >= 0; i-- {
+		if store, ok := b.Instrs[i].(*ssa.Store); ok && store.Addr == alloc {
+			return store.Val
+		}
+	}
+
+	return v
 }
 
 func usesErrorValue(b *ssa.BasicBlock, errVal ssa.Value) bool {
@@ -218,6 +265,37 @@ func usesErrorValue(b *ssa.BasicBlock, errVal ssa.Value) bool {
 				if ok {
 					if isUsedInSlice(sliceArg, errVal) {
 						return true
+					}
+				}
+			}
+			continue
+		}
+
+		// The error may also be handed over by a store (field, pointer, element),
+		// a channel send, a go/defer statement or a closure binding.
+		switch instr.(type) {
+		case *ssa.Store, *ssa.Send, *ssa.Go, *ssa.Defer, *ssa.MakeClosure:
+			var buf [10]*ssa.Value
+			for _, operand := range instr.Operands(buf[:0]) {
+				if *operand != nil && isUsedInValue(*operand, errVal) {
+					return true
+				}
+			}
+
+			// A closure captures the variable which holds the error.
+			if closure, ok := instr.(*ssa.MakeClosure); ok {
+				for _, binding := range closure.Bindings {
+					alloc, ok := binding.(*ssa.Alloc)
+					if !ok || alloc.Referrers() == nil {
+						continue
+					}
+					if load, ok := errVal.(*ssa.UnOp); ok && load.Op == token.MUL && load.X == alloc {
+						return true // the variable itself is captured
+					}
+					for _, r := range *alloc.Referrers() {
+						if store, ok := r.(*ssa.Store); ok && store.Addr == alloc && isUsedInValue(store.Val, errVal) {
+							return true
+						}
 					}
 				}
 			}
