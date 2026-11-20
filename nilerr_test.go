@@ -9,6 +9,12 @@ import (
 )
 
 func Test(t *testing.T) {
+	cases := []string{"a", "b", "c"}
+
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, nilerr.Analyzer, "a")
+	for _, pkg := range cases {
+		t.Run(pkg, func(t *testing.T) {
+			analysistest.Run(t, testdata, nilerr.Analyzer, pkg)
+		})
+	}
 }
