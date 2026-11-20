@@ -3,8 +3,9 @@ package nilerr_test
 import (
 	"testing"
 
-	"github.com/gostaticanalysis/nilerr"
 	"golang.org/x/tools/go/analysis/analysistest"
+
+	"github.com/gostaticanalysis/nilerr"
 )
 
 func Test(t *testing.T) {
